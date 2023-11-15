@@ -43,18 +43,20 @@ def get_batch(split):
     x, y = x.to(device), y.to(device)
     return x, y
 
-@torch.no_grad()
+@torch.no_grad()  # context manager. Everything that happens here will not be tracked by autograd (.backward() etc) --> more memory efficient
 def estimate_loss():
+    """ averages out the loss over multiple batches """
     out = {}
-    model.eval()
+    model.eval()  # set to evaluation mode
     for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             X, Y = get_batch(split)
             logits, loss = model(X, Y)
             losses[k] = loss.item()
-        out[split] = losses.mean()
-    model.train()
+        out[split] = losses.mean() # average loss for both splits
+    model.train() # RE-set back to train mode!! NOTE: for this particular model that has NO dropout/batchNorm layers etc, this is not necessary, but it's good practice
+                  # to do this anyway, as some layers have different behaviour during train or inference time.
     return out
 
 # super simple bigram model
@@ -99,7 +101,7 @@ model = BigramLanguageModel(vocab_size)
 m = model.to(device)
 
 # create a PyTorch optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # in general more advanced than SGD. For small networks like this, a higher lr is OK.
 
 for iter in range(max_iters):
 
@@ -113,10 +115,10 @@ for iter in range(max_iters):
 
     # evaluate the loss
     logits, loss = model(xb, yb)
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
+    optimizer.zero_grad(set_to_none=True) # zero gradients from previous step
+    loss.backward() # backprop: get gradients w.r.t. model parameters
+    optimizer.step() # update parameters using the gradients
 
 # generate from the model
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+print(decode(m.generate(context, max_new_tokens=500)[0].tolist())) # [0] because generate() returns a batch of samples, but we only want the first one!
